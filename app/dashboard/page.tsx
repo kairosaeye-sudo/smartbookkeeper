@@ -1,570 +1,504 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import Link from "next/link";
-import {
-  BarChart3,
-  Receipt,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  PieChart,
-  FileText,
-  Settings,
-  Bell,
-  Search,
-  Plus,
-  Upload,
-  Filter,
-  Download,
-  Eye,
-  Check,
-  Clock,
-  AlertCircle,
-  BookOpen,
-  Menu,
-  X,
-  ChevronDown,
-  ArrowUpRight,
-  ArrowDownRight,
-} from "lucide-react";
-import {
-  mockTransactions,
-  mockCategories,
-  mockMonthlyData,
-  mockReceipts,
-  mockStats,
-  formatCurrency,
-  formatDate,
-} from "@/lib/mock-data";
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import Navbar from '@/components/Navbar';
+import { Transaction, Receipt, Category, Report } from '@/lib/types';
 
-export default function Dashboard() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+function DashboardContent() {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'receipts' | 'categories' | 'reports'>('overview');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [report, setReport] = useState<Report | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const navItems = [
-    { id: "overview", label: "Overview", icon: BarChart3 },
-    { id: "transactions", label: "Transactions", icon: DollarSign },
-    { id: "receipts", label: "Receipts", icon: Receipt },
-    { id: "reports", label: "Reports", icon: FileText },
-    { id: "categories", label: "Categories", icon: PieChart },
-  ];
+  // Transaction form
+  const [showTxForm, setShowTxForm] = useState(false);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [txForm, setTxForm] = useState({ type: 'expense' as 'income' | 'expense', amount: '', category: '', description: '', date: '' });
+
+  // Receipt form
+  const [showReceiptForm, setShowReceiptForm] = useState(false);
+  const [receiptForm, setReceiptForm] = useState({ merchant: '', amount: '', date: '', category: '', imageUrl: '' });
+
+  // Category form
+  const [showCatForm, setShowCatForm] = useState(false);
+  const [editingCat, setEditingCat] = useState<Category | null>(null);
+  const [catForm, setCatForm] = useState({ name: '', type: 'expense' as 'income' | 'expense', color: '#7c3aed' });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [txRes, rxRes, catRes, repRes] = await Promise.all([
+        api.getTransactions(),
+        api.getReceipts(),
+        api.getCategories(),
+        api.getReport(),
+      ]);
+      setTransactions(txRes.transactions);
+      setReceipts(rxRes.receipts);
+      setCategories(catRes.categories);
+      setReport(repRes.report);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Transaction handlers
+  const handleTxSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingTx) {
+        await api.updateTransaction(editingTx.id, { ...txForm, amount: parseFloat(txForm.amount) });
+      } else {
+        await api.createTransaction({ ...txForm, amount: parseFloat(txForm.amount) });
+      }
+      setShowTxForm(false);
+      setEditingTx(null);
+      setTxForm({ type: 'expense', amount: '', category: '', description: '', date: '' });
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleEditTx = (tx: Transaction) => {
+    setEditingTx(tx);
+    setTxForm({ type: tx.type, amount: tx.amount.toString(), category: tx.category, description: tx.description, date: tx.date });
+    setShowTxForm(true);
+  };
+
+  const handleDeleteTx = async (id: string) => {
+    if (!confirm('Delete this transaction?')) return;
+    try {
+      await api.deleteTransaction(id);
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  // Receipt handlers
+  const handleReceiptSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.createReceipt({ ...receiptForm, amount: parseFloat(receiptForm.amount) });
+      setShowReceiptForm(false);
+      setReceiptForm({ merchant: '', amount: '', date: '', category: '', imageUrl: '' });
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  // Category handlers
+  const handleCatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingCat) {
+        await api.updateCategory(editingCat.id, catForm);
+      } else {
+        await api.createCategory(catForm);
+      }
+      setShowCatForm(false);
+      setEditingCat(null);
+      setCatForm({ name: '', type: 'expense', color: '#7c3aed' });
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleEditCat = (cat: Category) => {
+    setEditingCat(cat);
+    setCatForm({ name: cat.name, type: cat.type, color: cat.color });
+    setShowCatForm(true);
+  };
+
+  const formatCurrency = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500"></div>
+      </div>
+    );
+  }
+
+  const tabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'transactions', label: 'Transactions' },
+    { id: 'receipts', label: 'Receipts' },
+    { id: 'categories', label: 'Categories' },
+    { id: 'reports', label: 'Reports' },
+  ] as const;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex items-center gap-2 h-16 px-6 border-b border-gray-100">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-white" />
+    <div className="min-h-screen bg-zinc-950">
+      <Navbar />
+      <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+            <p className="text-zinc-400 mt-1">Welcome back, {user?.name}</p>
           </div>
-          <span className="text-lg font-bold text-gray-900">SmartBookkeeper</span>
-        </div>
 
-        <nav className="p-4 space-y-1">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                setActiveTab(item.id);
-                setSidebarOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                activeTab === item.id
-                  ? "bg-blue-50 text-blue-600"
-                  : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="font-medium">{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
-            <Settings className="w-5 h-5" />
-            <span className="font-medium">Settings</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <div className="flex-1 lg:ml-64">
-        {/* Top Bar */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-          <div className="flex items-center justify-between h-16 px-4 sm:px-6">
-            <div className="flex items-center gap-4">
+          {/* Tabs */}
+          <div className="flex gap-1 mb-8 overflow-x-auto pb-2">
+            {tabs.map((tab) => (
               <button
-                className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-violet-600 text-white'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                }`}
               >
-                <Menu className="w-6 h-6" />
+                {tab.label}
               </button>
-              <div className="hidden sm:flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 w-64">
-                <Search className="w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search transactions..."
-                  className="bg-transparent text-sm outline-none flex-1"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button className="relative p-2 rounded-lg hover:bg-gray-100">
-                <Bell className="w-5 h-5 text-gray-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white text-sm font-semibold">
-                  JD
-                </div>
-                <ChevronDown className="w-4 h-4 text-gray-400" />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <main className="p-4 sm:p-6">
-          {activeTab === "overview" && <OverviewTab />}
-          {activeTab === "transactions" && <TransactionsTab />}
-          {activeTab === "receipts" && <ReceiptsTab />}
-          {activeTab === "reports" && <ReportsTab />}
-          {activeTab === "categories" && <CategoriesTab />}
-        </main>
-      </div>
-
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-function OverviewTab() {
-  return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Income"
-          value={formatCurrency(mockStats.totalIncome)}
-          change="+4.4%"
-          positive={true}
-          icon={TrendingUp}
-          color="green"
-        />
-        <StatCard
-          title="Total Expenses"
-          value={formatCurrency(mockStats.totalExpenses)}
-          change="-2.1%"
-          positive={true}
-          icon={TrendingDown}
-          color="red"
-        />
-        <StatCard
-          title="Net Profit"
-          value={formatCurrency(mockStats.netProfit)}
-          change="+8.2%"
-          positive={true}
-          icon={DollarSign}
-          color="blue"
-        />
-        <StatCard
-          title="Pending Receipts"
-          value={mockStats.pendingReceipts.toString()}
-          change="Needs review"
-          positive={false}
-          icon={Clock}
-          color="orange"
-        />
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Income vs Expenses Chart */}
-        <div className="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Income vs Expenses</h3>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="text-gray-600">Income</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <span className="text-gray-600">Expenses</span>
-              </div>
-            </div>
-          </div>
-          <div className="h-64 flex items-end justify-between gap-2">
-            {mockMonthlyData.map((d, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div className="w-full flex gap-1 items-end justify-center h-48">
-                  <div
-                    className="w-4 bg-green-400 rounded-t-sm"
-                    style={{ height: `${(d.income / 30000) * 100}%` }}
-                  ></div>
-                  <div
-                    className="w-4 bg-red-400 rounded-t-sm"
-                    style={{ height: `${(d.expenses / 30000) * 100}%` }}
-                  ></div>
-                </div>
-                <span className="text-xs text-gray-500">{d.month}</span>
-              </div>
             ))}
           </div>
-        </div>
 
-        {/* Category Breakdown */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">Top Categories</h3>
-          <div className="space-y-4">
-            {mockCategories.slice(0, 6).map((cat, i) => (
-              <div key={i}>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-gray-600">{cat.icon} {cat.name}</span>
-                  <span className="font-medium text-gray-900">{formatCurrency(cat.spent)}</span>
+          {/* Overview */}
+          {activeTab === 'overview' && report && (
+            <div className="space-y-8">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="card">
+                  <p className="text-sm text-zinc-400 mb-1">Total Income</p>
+                  <p className="text-2xl font-bold text-green-400">{formatCurrency(report.totalIncome)}</p>
                 </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${Math.min((cat.spent / 2000) * 100, 100)}%`,
-                      backgroundColor: cat.color,
-                    }}
-                  ></div>
+                <div className="card">
+                  <p className="text-sm text-zinc-400 mb-1">Total Expenses</p>
+                  <p className="text-2xl font-bold text-red-400">{formatCurrency(report.totalExpenses)}</p>
+                </div>
+                <div className="card">
+                  <p className="text-sm text-zinc-400 mb-1">Net Profit</p>
+                  <p className={`text-2xl font-bold ${report.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {formatCurrency(report.netProfit)}
+                  </p>
+                </div>
+                <div className="card">
+                  <p className="text-sm text-zinc-400 mb-1">Transactions</p>
+                  <p className="text-2xl font-bold text-white">{report.transactionCount}</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      {/* Recent Transactions */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900">Recent Transactions</h3>
-          <Link
-            href="/dashboard?tab=transactions"
-            className="text-blue-600 text-sm font-medium hover:text-blue-700"
-          >
-            View all
-          </Link>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-sm text-gray-500 border-b border-gray-100">
-                <th className="px-6 py-3 font-medium">Date</th>
-                <th className="px-6 py-3 font-medium">Description</th>
-                <th className="px-6 py-3 font-medium">Category</th>
-                <th className="px-6 py-3 font-medium">Amount</th>
-                <th className="px-6 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockTransactions.slice(0, 5).map((t) => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-600">{formatDate(t.date)}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{t.description}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{t.category}</td>
-                  <td className={`px-6 py-4 text-sm font-semibold ${t.type === "income" ? "text-green-600" : "text-red-600"}`}>
-                    {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={t.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TransactionsTab() {
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-2xl font-bold text-gray-900">Transactions</h2>
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-            <Filter className="w-4 h-4" />
-            Filter
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-            <Download className="w-4 h-4" />
-            Export
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-            <Plus className="w-4 h-4" />
-            Add Transaction
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-sm text-gray-500 border-b border-gray-100 bg-gray-50">
-                <th className="px-6 py-3 font-medium">Date</th>
-                <th className="px-6 py-3 font-medium">Description</th>
-                <th className="px-6 py-3 font-medium">Category</th>
-                <th className="px-6 py-3 font-medium">Type</th>
-                <th className="px-6 py-3 font-medium">Amount</th>
-                <th className="px-6 py-3 font-medium">Status</th>
-                <th className="px-6 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockTransactions.map((t) => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-600">{formatDate(t.date)}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{t.description}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{t.category}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      t.type === "income" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                    }`}>
-                      {t.type}
-                    </span>
-                  </td>
-                  <td className={`px-6 py-4 text-sm font-semibold ${t.type === "income" ? "text-green-600" : "text-red-600"}`}>
-                    {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={t.status} />
-                  </td>
-                  <td className="px-6 py-4">
-                    <button className="p-1 hover:bg-gray-100 rounded">
-                      <Eye className="w-4 h-4 text-gray-400" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ReceiptsTab() {
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-2xl font-bold text-gray-900">Receipts</h2>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          <Upload className="w-4 h-4" />
-          Upload Receipt
-        </button>
-      </div>
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {mockReceipts.map((r) => (
-          <div key={r.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <Receipt className="w-6 h-6 text-gray-400" />
-              </div>
-              <ReceiptStatusBadge status={r.status} />
-            </div>
-            <h4 className="font-semibold text-gray-900 mb-1">{r.merchant}</h4>
-            <p className="text-sm text-gray-500 mb-2">{formatDate(r.date)}</p>
-            <div className="flex items-center justify-between">
-              <span className="text-lg font-bold text-gray-900">{formatCurrency(r.amount)}</span>
-              <span className="text-sm text-gray-500">{r.category}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ReportsTab() {
-  const reports = [
-    { name: "Profit & Loss Statement", description: "Monthly P&L for September 2026", date: "Sep 2026", type: "PDF" },
-    { name: "Balance Sheet", description: "As of September 30, 2026", date: "Sep 2026", type: "PDF" },
-    { name: "Tax Summary", description: "Q3 2026 tax preparation report", date: "Q3 2026", type: "PDF" },
-    { name: "Expense Breakdown", description: "Detailed expense analysis by category", date: "Sep 2026", type: "Excel" },
-    { name: "Cash Flow Statement", description: "Monthly cash flow analysis", date: "Sep 2026", type: "PDF" },
-    { name: "Annual Summary", description: "Year-to-date financial summary", date: "2026", type: "PDF" },
-  ];
-
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-2xl font-bold text-gray-900">Reports</h2>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          <Plus className="w-4 h-4" />
-          Generate Report
-        </button>
-      </div>
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {reports.map((r, i) => (
-          <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                <FileText className="w-5 h-5 text-blue-600" />
-              </div>
-              <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">{r.type}</span>
-            </div>
-            <h4 className="font-semibold text-gray-900 mb-1">{r.name}</h4>
-            <p className="text-sm text-gray-500 mb-4">{r.description}</p>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400">{r.date}</span>
-              <button className="flex items-center gap-1 text-blue-600 text-sm font-medium hover:text-blue-700">
-                <Download className="w-4 h-4" />
-                Download
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CategoriesTab() {
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-2xl font-bold text-gray-900">Categories</h2>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          <Plus className="w-4 h-4" />
-          Add Category
-        </button>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="text-left text-sm text-gray-500 border-b border-gray-100 bg-gray-50">
-              <th className="px-6 py-3 font-medium">Category</th>
-              <th className="px-6 py-3 font-medium">Budget</th>
-              <th className="px-6 py-3 font-medium">Spent</th>
-              <th className="px-6 py-3 font-medium">Remaining</th>
-              <th className="px-6 py-3 font-medium">Progress</th>
-            </tr>
-          </thead>
-          <tbody>
-            {mockCategories.filter(c => c.budget > 0).map((cat, i) => {
-              const remaining = cat.budget - cat.spent;
-              const pct = Math.min((cat.spent / cat.budget) * 100, 100);
-              return (
-                <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{cat.icon}</span>
-                      <span className="font-medium text-gray-900">{cat.name}</span>
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="card">
+                  <h3 className="text-lg font-semibold text-white mb-4">Top Categories</h3>
+                  {report.topCategories.length > 0 ? (
+                    <div className="space-y-3">
+                      {report.topCategories.map((cat) => (
+                        <div key={cat.name} className="flex items-center justify-between">
+                          <span className="text-sm text-zinc-300">{cat.name}</span>
+                          <span className="text-sm font-medium text-white">{formatCurrency(cat.amount)}</span>
+                        </div>
+                      ))}
                     </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{formatCurrency(cat.budget)}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatCurrency(cat.spent)}</td>
-                  <td className={`px-6 py-4 text-sm font-medium ${remaining >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    {formatCurrency(Math.abs(remaining))}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${pct}%`, backgroundColor: cat.color }}
-                        ></div>
+                  ) : (
+                    <p className="text-zinc-500 text-sm">No data yet</p>
+                  )}
+                </div>
+                <div className="card">
+                  <h3 className="text-lg font-semibold text-white mb-4">Monthly Summary</h3>
+                  {report.monthlyData.length > 0 ? (
+                    <div className="space-y-3">
+                      {report.monthlyData.map((m) => (
+                        <div key={m.month} className="flex items-center justify-between">
+                          <span className="text-sm text-zinc-300">{m.month}</span>
+                          <div className="flex gap-4">
+                            <span className="text-sm text-green-400">+{formatCurrency(m.income)}</span>
+                            <span className="text-sm text-red-400">-{formatCurrency(m.expenses)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-zinc-500 text-sm">No data yet</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Transactions */}
+          {activeTab === 'transactions' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">Transactions</h2>
+                <button onClick={() => { setShowTxForm(true); setEditingTx(null); setTxForm({ type: 'expense', amount: '', category: '', description: '', date: '' }); }} className="btn-primary text-sm">
+                  + Add Transaction
+                </button>
+              </div>
+
+              {showTxForm && (
+                <form onSubmit={handleTxSubmit} className="card space-y-4">
+                  <h3 className="text-white font-medium">{editingTx ? 'Edit' : 'Add'} Transaction</h3>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Type</label>
+                      <select className="input" value={txForm.type} onChange={(e) => setTxForm({ ...txForm, type: e.target.value as 'income' | 'expense' })}>
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Amount</label>
+                      <input type="number" step="0.01" className="input" value={txForm.amount} onChange={(e) => setTxForm({ ...txForm, amount: e.target.value })} placeholder="0.00" required />
+                    </div>
+                    <div>
+                      <label className="label">Category</label>
+                      <input type="text" className="input" value={txForm.category} onChange={(e) => setTxForm({ ...txForm, category: e.target.value })} placeholder="e.g. Office Supplies" required />
+                    </div>
+                    <div>
+                      <label className="label">Date</label>
+                      <input type="date" className="input" value={txForm.date} onChange={(e) => setTxForm({ ...txForm, date: e.target.value })} required />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label">Description</label>
+                    <input type="text" className="input" value={txForm.description} onChange={(e) => setTxForm({ ...txForm, description: e.target.value })} placeholder="What was this for?" required />
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="submit" className="btn-primary text-sm">{editingTx ? 'Update' : 'Add'}</button>
+                    <button type="button" onClick={() => { setShowTxForm(false); setEditingTx(null); }} className="btn-secondary text-sm">Cancel</button>
+                  </div>
+                </form>
+              )}
+
+              <div className="card overflow-x-auto">
+                {transactions.length > 0 ? (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-zinc-400 border-b border-zinc-800">
+                        <th className="pb-3 font-medium">Date</th>
+                        <th className="pb-3 font-medium">Description</th>
+                        <th className="pb-3 font-medium">Category</th>
+                        <th className="pb-3 font-medium text-right">Amount</th>
+                        <th className="pb-3 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.map((tx) => (
+                        <tr key={tx.id} className="border-b border-zinc-800/50">
+                          <td className="py-3 text-zinc-300">{formatDate(tx.date)}</td>
+                          <td className="py-3 text-white">{tx.description}</td>
+                          <td className="py-3 text-zinc-400">{tx.category}</td>
+                          <td className={`py-3 text-right font-medium ${tx.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
+                            {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                          </td>
+                          <td className="py-3 text-right">
+                            <button onClick={() => handleEditTx(tx)} className="text-zinc-400 hover:text-white mr-3">Edit</button>
+                            <button onClick={() => handleDeleteTx(tx.id)} className="text-zinc-400 hover:text-red-400">Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-zinc-500 text-sm py-8 text-center">No transactions yet. Add your first one!</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Receipts */}
+          {activeTab === 'receipts' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">Receipts</h2>
+                <button onClick={() => setShowReceiptForm(true)} className="btn-primary text-sm">+ Add Receipt</button>
+              </div>
+
+              {showReceiptForm && (
+                <form onSubmit={handleReceiptSubmit} className="card space-y-4">
+                  <h3 className="text-white font-medium">Add Receipt</h3>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Merchant</label>
+                      <input type="text" className="input" value={receiptForm.merchant} onChange={(e) => setReceiptForm({ ...receiptForm, merchant: e.target.value })} placeholder="e.g. Office Depot" required />
+                    </div>
+                    <div>
+                      <label className="label">Amount</label>
+                      <input type="number" step="0.01" className="input" value={receiptForm.amount} onChange={(e) => setReceiptForm({ ...receiptForm, amount: e.target.value })} placeholder="0.00" required />
+                    </div>
+                    <div>
+                      <label className="label">Date</label>
+                      <input type="date" className="input" value={receiptForm.date} onChange={(e) => setReceiptForm({ ...receiptForm, date: e.target.value })} required />
+                    </div>
+                    <div>
+                      <label className="label">Category</label>
+                      <input type="text" className="input" value={receiptForm.category} onChange={(e) => setReceiptForm({ ...receiptForm, category: e.target.value })} placeholder="e.g. Office Supplies" required />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label">Image URL</label>
+                    <input type="url" className="input" value={receiptForm.imageUrl} onChange={(e) => setReceiptForm({ ...receiptForm, imageUrl: e.target.value })} placeholder="https://..." />
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="submit" className="btn-primary text-sm">Add Receipt</button>
+                    <button type="button" onClick={() => setShowReceiptForm(false)} className="btn-secondary text-sm">Cancel</button>
+                  </div>
+                </form>
+              )}
+
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {receipts.length > 0 ? (
+                  receipts.map((r) => (
+                    <div key={r.id} className="card">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <p className="text-white font-medium">{r.merchant}</p>
+                          <p className="text-sm text-zinc-400">{formatDate(r.date)}</p>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          r.status === 'processed' ? 'bg-green-500/10 text-green-400' :
+                          r.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
+                          'bg-red-500/10 text-red-400'
+                        }`}>
+                          {r.status}
+                        </span>
                       </div>
-                      <span className="text-xs text-gray-500 w-10">{pct.toFixed(0)}%</span>
+                      <p className="text-lg font-bold text-white">{formatCurrency(r.amount)}</p>
+                      <p className="text-sm text-zinc-400 mt-1">{r.category}</p>
                     </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                  ))
+                ) : (
+                  <div className="card sm:col-span-2 lg:col-span-3">
+                    <p className="text-zinc-500 text-sm py-8 text-center">No receipts yet. Add your first one!</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Categories */}
+          {activeTab === 'categories' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">Categories</h2>
+                <button onClick={() => { setShowCatForm(true); setEditingCat(null); setCatForm({ name: '', type: 'expense', color: '#7c3aed' }); }} className="btn-primary text-sm">+ Add Category</button>
+              </div>
+
+              {showCatForm && (
+                <form onSubmit={handleCatSubmit} className="card space-y-4">
+                  <h3 className="text-white font-medium">{editingCat ? 'Edit' : 'Add'} Category</h3>
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="label">Name</label>
+                      <input type="text" className="input" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} placeholder="e.g. Marketing" required />
+                    </div>
+                    <div>
+                      <label className="label">Type</label>
+                      <select className="input" value={catForm.type} onChange={(e) => setCatForm({ ...catForm, type: e.target.value as 'income' | 'expense' })}>
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Color</label>
+                      <input type="color" className="input h-[42px] cursor-pointer" value={catForm.color} onChange={(e) => setCatForm({ ...catForm, color: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="submit" className="btn-primary text-sm">{editingCat ? 'Update' : 'Add'}</button>
+                    <button type="button" onClick={() => { setShowCatForm(false); setEditingCat(null); }} className="btn-secondary text-sm">Cancel</button>
+                  </div>
+                </form>
+              )}
+
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {categories.length > 0 ? (
+                  categories.map((cat) => (
+                    <div key={cat.id} className="card flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }}></div>
+                        <div>
+                          <p className="text-white font-medium">{cat.name}</p>
+                          <p className="text-xs text-zinc-400">{cat.type}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => handleEditCat(cat)} className="text-zinc-400 hover:text-white text-sm">Edit</button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="card sm:col-span-2 lg:col-span-3">
+                    <p className="text-zinc-500 text-sm py-8 text-center">No categories yet. Add your first one!</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Reports */}
+          {activeTab === 'reports' && report && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-semibold text-white">Reports</h2>
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="card">
+                  <h3 className="text-white font-medium mb-4">Profit & Loss</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Total Income</span>
+                      <span className="text-green-400 font-medium">{formatCurrency(report.totalIncome)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Total Expenses</span>
+                      <span className="text-red-400 font-medium">{formatCurrency(report.totalExpenses)}</span>
+                    </div>
+                    <hr className="border-zinc-800" />
+                    <div className="flex justify-between">
+                      <span className="text-white font-medium">Net Profit</span>
+                      <span className={`font-bold ${report.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {formatCurrency(report.netProfit)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <h3 className="text-white font-medium mb-4">Monthly Breakdown</h3>
+                  {report.monthlyData.length > 0 ? (
+                    <div className="space-y-3">
+                      {report.monthlyData.map((m) => (
+                        <div key={m.month} className="flex items-center justify-between">
+                          <span className="text-zinc-300">{m.month}</span>
+                          <div className="flex gap-4">
+                            <span className="text-green-400 text-sm">+{formatCurrency(m.income)}</span>
+                            <span className="text-red-400 text-sm">-{formatCurrency(m.expenses)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-zinc-500 text-sm">No data yet</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
 
-function StatCard({
-  title,
-  value,
-  change,
-  positive,
-  icon: Icon,
-  color,
-}: {
-  title: string;
-  value: string;
-  change: string;
-  positive: boolean;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-}) {
-  const colorMap: Record<string, string> = {
-    green: "bg-green-50 text-green-600",
-    red: "bg-red-50 text-red-600",
-    blue: "bg-blue-50 text-blue-600",
-    orange: "bg-orange-50 text-orange-600",
-  };
-
+export default function DashboardPage() {
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-      <div className="flex items-center justify-between mb-4">
-        <div className={`w-10 h-10 rounded-lg ${colorMap[color]} flex items-center justify-center`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <div className={`flex items-center gap-1 text-sm font-medium ${positive ? "text-green-600" : "text-orange-600"}`}>
-          {positive ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
-          {change}
-        </div>
-      </div>
-      <p className="text-sm text-gray-500 mb-1">{title}</p>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    reviewed: "bg-green-100 text-green-700",
-    categorized: "bg-blue-100 text-blue-700",
-    pending: "bg-yellow-100 text-yellow-700",
-  };
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-700"}`}>
-      {status}
-    </span>
-  );
-}
-
-function ReceiptStatusBadge({ status }: { status: string }) {
-  const config: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string; color: string }> = {
-    categorized: { icon: Check, label: "Categorized", color: "bg-green-100 text-green-700" },
-    processing: { icon: Clock, label: "Processing", color: "bg-blue-100 text-blue-700" },
-    needs_review: { icon: AlertCircle, label: "Needs Review", color: "bg-orange-100 text-orange-700" },
-  };
-  const c = config[status] || config.processing;
-  return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${c.color}`}>
-      <c.icon className="w-3 h-3" />
-      {c.label}
-    </span>
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }

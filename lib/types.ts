@@ -1,53 +1,51 @@
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  businessName: string;
+  plan: 'starter' | 'professional' | 'enterprise';
+  createdAt: string;
+}
+
 export interface Transaction {
   id: string;
-  date: string;
-  description: string;
+  userId: string;
+  type: 'income' | 'expense';
   amount: number;
   category: string;
-  type: "income" | "expense";
-  receipt?: string;
-  status: "pending" | "categorized" | "reviewed";
-}
-
-export interface Category {
-  name: string;
-  color: string;
-  icon: string;
-  budget: number;
-  spent: number;
-}
-
-export interface MonthlyData {
-  month: string;
-  income: number;
-  expenses: number;
-  profit: number;
+  description: string;
+  date: string;
+  receiptId?: string | null;
+  createdAt: string;
 }
 
 export interface Receipt {
   id: string;
-  date: string;
+  userId: string;
   merchant: string;
   amount: number;
+  date: string;
   category: string;
-  status: "processing" | "categorized" | "needs_review";
-  imageUrl?: string;
+  imageUrl: string;
+  ocrText: string;
+  status: 'processed' | 'pending' | 'error';
+  createdAt: string;
 }
 
-export interface User {
+export interface Category {
   id: string;
+  userId: string;
   name: string;
-  email: string;
-  businessName: string;
-  plan: "free" | "starter" | "professional" | "enterprise";
-  avatar?: string;
+  type: 'income' | 'expense';
+  color: string;
+  createdAt: string;
 }
 
-export interface DashboardStats {
+export interface Report {
   totalIncome: number;
   totalExpenses: number;
   netProfit: number;
-  pendingReceipts: number;
-  categorizedThisMonth: number;
-  monthlyGrowth: number;
+  transactionCount: number;
+  topCategories: { name: string; amount: number }[];
+  monthlyData: { month: string; income: number; expenses: number }[];
 }

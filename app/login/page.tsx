@@ -5,35 +5,29 @@ import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function SignupPage() {
-  const { register } = useAuth();
+export default function LoginPage() {
+  const { login } = useAuth();
   const router = useRouter();
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [businessName, setBusinessName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
     setLoading(true);
-    const result = await register(name, email, password, businessName);
+    const result = await login(email, password);
     setLoading(false);
     if (result.ok) {
       router.push('/dashboard');
     } else {
-      setError(result.error || 'Registration failed');
+      setError(result.error || 'Login failed');
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
@@ -44,8 +38,8 @@ export default function SignupPage() {
             </div>
             <span className="text-lg font-bold text-white">SmartBookkeeper</span>
           </Link>
-          <h1 className="text-2xl font-bold text-white">Create your account</h1>
-          <p className="text-zinc-400 mt-1">Start your 14-day free trial</p>
+          <h1 className="text-2xl font-bold text-white">Welcome back</h1>
+          <p className="text-zinc-400 mt-1">Log in to your account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card space-y-4">
@@ -54,28 +48,6 @@ export default function SignupPage() {
               {error}
             </div>
           )}
-          <div>
-            <label className="label">Full Name</label>
-            <input
-              type="text"
-              className="input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="John Smith"
-              required
-            />
-          </div>
-          <div>
-            <label className="label">Business Name</label>
-            <input
-              type="text"
-              className="input"
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-              placeholder="Acme Inc."
-              required
-            />
-          </div>
           <div>
             <label className="label">Email</label>
             <input
@@ -94,18 +66,18 @@ export default function SignupPage() {
               className="input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder="Enter your password"
               required
             />
           </div>
           <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
-            {loading ? 'Creating account...' : 'Create account'}
+            {loading ? 'Logging in...' : 'Log in'}
           </button>
         </form>
 
         <p className="text-center text-sm text-zinc-400 mt-6">
-          Already have an account?{' '}
-          <Link href="/login" className="text-violet-400 hover:text-violet-300">Log in</Link>
+          Don&apos;t have an account?{' '}
+          <Link href="/signup" className="text-violet-400 hover:text-violet-300">Sign up</Link>
         </p>
       </div>
     </div>
